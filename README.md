@@ -136,6 +136,308 @@
     *   **API Key**: 如果 `config.jsonc` 中的 `api_key` 为空，则可随便输入；如果已设置，则必须提供正确的 Key。
     *   **Model Name**: 模型现在不再由本地决定，而是由你再LMArena对话中，重试（Retry）的那条消息所决定。所以务必提前在对话或者Battle中找到你想要的模型的对话。DirectChat可以使用DC大佬提供的**LMArenaDirectChat模型注入 (仙之人兮列如麻) V5.js**这个油猴脚本来确定你想用的模型（wolfstride等最新测试模型可能无法直接对话，必须在Battle里进行捕捉）。
 
+# LMArenaBridge Docker 部署指南
+
+## 🚀 快速开始
+
+### 1. 准备工作
+
+确保您的系统已安装：
+- Docker (>= 20.10)
+- Docker Compose (>= 2.0)
+
+### 2. 项目结构
+
+```
+LMArenaBridge/
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── requirements.txt
+├── api_server.py
+├── id_updater.py
+├── data/
+│   ├── config.jsonc
+│   ├── models.json
+│   └── model_endpoint_map.json
+├── modules/
+│   ├── image_generation.py
+│   └── update_script.py
+└── TampermonkeyScript/
+    └── LMArenaApiBridge.js
+```
+
+### 3. 部署步骤
+
+#### 方式一：使用 docker-compose（推荐）
+
+1. **克隆项目并进入目录**
+```bash
+git clone https://github.com/Lianues/LMArenaBridge.git
+cd LMArenaBridge
+```
+
+2. **创建数据目录和配置文件**
+```bash
+mkdir -p data
+cp config.jsonc data/config.jsonc  # 如果原项目有的话
+# 或者创建新的配置文件（参考config.jsonc模板）
+```
+
+3. **启动服务**
+```bash
+docker-compose up -d
+```
+
+4. **查看日志**
+```bash
+docker-compose logs -f lmarenabridge
+```
+
+#### 方式二：直接使用 Docker
+
+1. **构建镜像**
+```bash
+docker build -t lmarenabridge .
+```
+
+2. **运行容器**
+```bash
+docker run -d \
+  --name lmarenabridge \
+  -p 5102:5102 \
+  -v $(pwd)/data:/app/data \
+  lmarenabridge
+```
+
+### 4. 配置说明
+
+#### 环境变量配置
+
+在 docker-compose.yml 中可以设置以下环境变量：
+
+```yaml
+environment:
+  - PORT=5102                    # 服务端口
+  - PYTHONUNBUFFERED=1          # Python输出缓冲
+  - LOG_LEVEL=INFO              # 日志级别
+  - API_KEY=your_api_key_here   # API密钥（可选）
+```
+
+#### 数据持久化
+
+通过数据卷挂载实现配置持久化：
+
+```yaml
+volumes:
+  - ./data/config.jsonc:/app/data/config.jsonc
+  - ./data/models.json:/app/data/models.json
+  - ./data/model_endpoint_map.json:/app/data/model_endpoint_map.json
+```
+
+### 5. 健康检查
+
+容器包含健康检查功能，会定期检查服务状态：
+
+```bash
+# 检查容器健康状态
+docker ps
+# 或
+docker-compose ps
+```
+
+### 6. 使用方式
+
+#### 安装Tampermonkey脚本
+
+1. 在浏览器中安装 Tampermonkey 扩展
+2. 将 `TampermonkeyScript/LMArenaApiBridge.js` 中的脚本安装到 Tampermonkey
+3. 确保脚本中的服务器地址指向您的Docker容器：`http://localhost:5102`
+
+#### 获取会话ID
+
+1. **启动ID更新器**
+```bash
+# 进入容器
+docker exec -it lmarenabridge bash
+# 运行ID更新脚本
+python id_updater.py
+```
+
+2. **在浏览器中操作**
+   - 打开 LMArena.ai 网站
+   - 确保页面标题显示 ✅ 或 🎯 图标
+   - 进入目标模型对话页面
+   - 点击重试(Retry)按钮获取会话ID
+
+#### 配置OpenAI客户端
+
+- **API Base URL**: `http://localhost:5102/v1`
+- **API Key**: 如果config.jsonc中设置了api_key，则需要提供；否则可以随意填写
+- **Model Name**: 使用从LMArena捕获的模型名称
+
+## 🔧 高级配置
+
+### 自定义端口
+
+如果需要更改默认端口（5102），修改以下配置：
+
+1. **docker-compose.yml**
+```yaml
+ports:
+  - "8080:8080"  # 宿主机端口:容器端口
+environment:
+  - PORT=8080
+```
+
+2. **config.jsonc**
+```json
+{
+  "port": 8080
+}
+```
+
+### 反向代理配置
+
+使用Nginx作为反向代理的示例配置：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        proxy_pass http://localhost:5102;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+```
+
+### 多实例部署
+
+如需部署多个实例，可以使用不同的端口：
+
+```yaml
+version: '3.8'
+services:
+  lmarenabridge-1:
+    build: .
+    ports:
+      - "5102:5102"
+    # ... 其他配置
+    
+  lmarenabridge-2:
+    build: .
+    ports:
+      - "5103:5102"
+    # ... 其他配置
+```
+
+## 📋 故障排除
+
+### 常见问题
+
+1. **容器启动失败**
+```bash
+# 查看详细日志
+docker-compose logs lmarenabridge
+```
+
+2. **无法连接到WebSocket**
+   - 确保防火墙允许5102端口
+   - 检查Tampermonkey脚本中的服务器地址
+   - 验证容器网络配置
+
+3. **会话ID获取失败**
+   - 确保浏览器中的LMArena页面正常加载
+   - 检查Tampermonkey脚本是否正确安装和启用
+   - 确认容器内的id_updater.py能正常运行
+
+### 日志查看
+
+```bash
+# 实时查看日志
+docker-compose logs -f lmarenabridge
+
+# 查看最近100行日志
+docker-compose logs --tail=100 lmarenabridge
+
+# 进入容器查看内部日志
+docker exec -it lmarenabridge tail -f /app/data/app.log
+```
+
+### 性能调优
+
+1. **内存限制**
+```yaml
+services:
+  lmarenabridge:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+```
+
+2. **CPU限制**
+```yaml
+services:
+  lmarenabridge:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+```
+
+## 🛡️ 安全注意事项
+
+1. **API密钥保护**：在生产环境中务必设置强API密钥
+2. **网络隔离**：考虑使用Docker网络隔离服务
+3. **HTTPS**：在生产环境中使用HTTPS和SSL证书
+4. **访问控制**：限制容器的网络访问权限
+
+## 📈 监控和维护
+
+### 定期备份
+
+```bash
+# 备份配置文件
+docker cp lmarenabridge:/app/data ./backup/
+
+# 或使用数据卷备份
+tar -czf backup-$(date +%Y%m%d).tar.gz ./data/
+```
+
+### 更新镜像
+
+```bash
+# 重新构建镜像
+docker-compose build --no-cache
+
+# 重启服务
+docker-compose down && docker-compose up -d
+```
+
+### 清理资源
+
+```bash
+# 清理未使用的镜像和容器
+docker system prune -a
+
+# 清理数据卷
+docker volume prune
+```
+
+通过以上Docker部署方案，您可以更方便地部署和管理LMArenaBridge服务，同时获得更好的隔离性和可移植性。
+
 4.  **开始聊天！** 💬
     现在你可以正常使用你的客户端了，所有的请求都会通过本地服务器代理到 LMArena 上！
 
