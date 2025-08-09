@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  lmarenabridge:
+    build: .
+    container_name: lmarenabridge
+    ports:
+      - "5102:5102"
+    volumes:
+      # 挂载配置文件到宿主机，便于修改
+      - ./data/config.jsonc:/app/data/config.jsonc
+      - ./data/models.json:/app/data/models.json
+      - ./data/model_endpoint_map.json:/app/data/model_endpoint_map.json
+      # 挂载整个data目录（推荐）
+      # - ./data:/app/data
+    environment:
+      - PORT=5102
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - lmarenabridge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5102/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  lmarenabridge-network:
+    driver: bridge
+
+# 如果需要持久化数据，可以使用volumes
+volumes:
+  lmarenabridge-data:
+    driver: local
