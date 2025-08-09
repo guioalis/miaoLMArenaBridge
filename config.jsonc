@@ -66,3 +66,35 @@
   // 如果设置了此值，所有到 /v1/chat/completions 的请求都必须在 Authorization 头部中包含正确的 Bearer Token。
   "api_key": ""
 }
+
+{
+  // 全局默认会话配置
+  "session_id": "your_session_id_here",
+  "message_id": "your_message_id_here",
+  
+  // API配置
+  "api_key": "",  // 留空表示不需要API密钥验证
+  "port": 5102,   // 服务端口
+  "host": "0.0.0.0",  // 监听地址，Docker中使用0.0.0.0
+  
+  // ID更新器配置
+  "id_updater_last_mode": "direct_chat",  // 默认模式：direct_chat 或 battle
+  "id_updater_battle_target": "A",        // Battle模式下的目标：A 或 B
+  
+  // 高级配置
+  "use_default_ids_if_mapping_not_found": true,  // 如果找不到模型映射，是否使用默认ID
+  "tavern_mode_enabled": false,                  // 是否启用酒馆模式
+  "bypass_mode_enabled": false,                  // 是否启用绕过模式
+  
+  // 自动更新配置
+  "auto_update_models": true,     // 是否自动更新模型列表
+  "auto_update_program": false,   // 是否自动更新程序
+  
+  // 日志配置
+  "log_level": "INFO",            // 日志级别：DEBUG, INFO, WARNING, ERROR
+  "log_file": "/app/data/app.log", // 日志文件路径
+  
+  // WebSocket配置
+  "websocket_timeout": 300,       // WebSocket超时时间（秒）
+  "max_message_size": 10485760    // 最大消息大小（10MB）
+}
